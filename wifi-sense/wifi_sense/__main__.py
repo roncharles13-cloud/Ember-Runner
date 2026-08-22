@@ -12,6 +12,7 @@ import argparse
 import sys
 
 from .dsp import SenseEngine
+from .features import FeatureEngine
 from .server import Recorder, serve
 from .sources import make_source
 
@@ -31,6 +32,8 @@ def main(argv=None) -> int:
     p.add_argument("--port", type=int, default=87 * 100 + 65)  # 8765
     p.add_argument("--window", type=float, default=30.0,
                    help="analysis window seconds (default: 30)")
+    p.add_argument("--no-features", action="store_true",
+                   help="disable spectrogram + delay-embedding features")
     args = p.parse_args(argv)
 
     if args.source == "replay" and not args.file:
@@ -46,8 +49,9 @@ def main(argv=None) -> int:
         return 2
 
     engine = SenseEngine(window_sec=args.window)
+    features = None if args.no_features else FeatureEngine()
     recorder = Recorder(args.record) if args.record else None
-    serve(source, engine, args.host, args.port, recorder)
+    serve(source, engine, args.host, args.port, recorder, features)
     return 0
 
 

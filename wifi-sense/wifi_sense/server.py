@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from .dsp import SenseEngine, SenseResult
+from .features import FMAX_HZ, NBINS, FeatureEngine
 
 STATIC = Path(__file__).parent / "static"
 
@@ -75,10 +76,12 @@ class CaptureThread(threading.Thread):
     """Reads the source, runs DSP, publishes to the hub."""
 
     def __init__(self, source, engine: SenseEngine, hub: Hub,
-                 recorder: Optional["Recorder"] = None):
+                 recorder: Optional["Recorder"] = None,
+                 features: Optional[FeatureEngine] = None):
         super().__init__(daemon=True)
         self.source = source
         self.engine = engine
+        self.features = features
         self.hub = hub
         self.recorder = recorder
         self._stop = threading.Event()
@@ -89,8 +92,14 @@ class CaptureThread(threading.Thread):
                 break
             if self.recorder:
                 self.recorder.write(t, rssi)
-            result = self.engine.add(rssi, t)
-            self.hub.publish(_result_to_payload(result))
+            payload = _result_to_payload(self.engine.add(rssi, t))
+            if self.features is not None:
+                f = self.features.add(rssi, t)
+                payload["spec"] = f.spec
+                payload["bands"] = f.bands
+                payload["embed"] = f.embed
+                payload["tau"] = f.tau
+            self.hub.publish(payload)
 
     def stop(self) -> None:
         self._stop.set()
@@ -175,11 +184,15 @@ def make_handler(hub: Hub, meta: dict):
 
 
 def serve(source, engine: SenseEngine, host: str, port: int,
-          recorder: Optional[Recorder] = None) -> None:
+          recorder: Optional[Recorder] = None,
+          features: Optional[FeatureEngine] = None) -> None:
     hub = Hub()
     meta = {"source": source.name,
-            "backend": getattr(source, "backend", None)}
-    cap = CaptureThread(source, engine, hub, recorder)
+            "backend": getattr(source, "backend", None),
+            "features": features is not None,
+            "fmax": FMAX_HZ if features else None,
+            "nbins": NBINS if features else None}
+    cap = CaptureThread(source, engine, hub, recorder, features)
     cap.start()
     httpd = ThreadingHTTPServer((host, port), make_handler(hub, meta))
     url = f"http://{host if host != '0.0.0.0' else 'localhost'}:{port}"

@@ -41,6 +41,20 @@
   .footnote{max-width:1080px;margin:18px auto 0;color:var(--dim);font-size:12px;line-height:1.7}
   code{font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:5px;color:var(--hot)}
   @media(max-width:820px){.wrap{grid-template-columns:1fr}}
+  /* latent-axes row */
+  .wrap2{max-width:1080px;margin:16px auto 0;display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  @media(max-width:820px){.wrap2{grid-template-columns:1fr}}
+  .axis{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;
+        font-size:11px;color:var(--dim);margin-top:8px}
+  .bands{margin-top:18px;display:flex;flex-direction:column;gap:11px}
+  .bandrow{display:grid;grid-template-columns:66px 1fr 40px;gap:10px;align-items:center;
+           font-size:12px;color:var(--dim);font-family:'JetBrains Mono',monospace}
+  .bandrow .bar{height:8px;border-radius:999px;background:rgba(255,255,255,.06);position:relative;overflow:hidden}
+  .bandrow .bar::after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--w,0%);
+        background:linear-gradient(90deg,var(--teal),var(--hot));border-radius:999px;transition:width .18s}
+  .bandrow b{text-align:right;color:var(--ui);font-weight:500}
+  .tag{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;
+       color:var(--teal);border:1px solid rgba(46,196,182,.3);border-radius:999px;padding:2px 9px;margin-left:8px}
 </style>
 </head>
 <body>
@@ -80,12 +94,33 @@
   </div>
 </div>
 
+<div class="wrap2">
+  <div class="card">
+    <h2>Micro-Doppler spectrogram <span class="tag">latent axis · time × freq</span></h2>
+    <canvas id="spectro" width="1400" height="260"></canvas>
+    <div class="axis"><span>0 Hz</span><span>← low = breathing · mid = limbs · high = walking</span><span id="fmaxLbl">3 Hz</span></div>
+  </div>
+  <div class="card">
+    <h2>Phase portrait <span class="tag">delay embedding</span></h2>
+    <canvas id="portrait" width="520" height="300"></canvas>
+    <div class="conf" id="tauLbl">s(t) vs s(t−τ)</div>
+    <div class="bands">
+      <div class="bandrow"><span>breathing</span><div class="bar" data-b="breathing"></div><b data-bv="breathing">0%</b></div>
+      <div class="bandrow"><span>limb</span><div class="bar" data-b="limb"></div><b data-bv="limb">0%</b></div>
+      <div class="bandrow"><span>fast</span><div class="bar" data-b="fast"></div><b data-bv="fast">0%</b></div>
+    </div>
+  </div>
+</div>
+
 <div class="footnote">
   Single-stream RSSI from your laptop's WiFi card. <b>Presence &amp; motion</b> are
   reliable; <b>breathing</b> resolves only when a subject is close to the link and
-  still (low confidence is expected and honestly reported). For pose/silhouette you
-  need CSI hardware — the pipeline is built to accept it. Start with
-  <code>python -m wifi_sense --source synthetic</code> to see it move.
+  still. The <b>spectrogram</b> and <b>phase portrait</b> are <i>latent axes</i> —
+  extra dimensions recovered from the same 1D signal by math alone (short-time FFT +
+  Takens delay-embedding): a still breather traces a clean loop and lights the low
+  band; walking smears the portrait into a cloud and spreads energy upward. For
+  pose/silhouette you still need CSI hardware — the pipeline is built to accept it.
+  Start with <code>python -m wifi_sense --source synthetic</code> to see it move.
 </div>
 
 <script>
@@ -96,6 +131,48 @@ const MAX = 600;
 
 const css = getComputedStyle(document.documentElement);
 const C = k => css.getPropertyValue(k).trim();
+
+/* ---- latent-axis panels: spectrogram + phase portrait ---- */
+const spectro = document.getElementById('spectro');
+const sctx = spectro.getContext('2d');
+const portrait = document.getElementById('portrait');
+const pctx = portrait.getContext('2d');
+const embBuf = [];               // recent [x,y] delay-embedded points
+const EMB_MAX = 340;
+
+// magma-ish colormap for the spectrogram, v in 0..1
+function heat(v){
+  const stops=[[10,8,24],[58,17,69],[122,30,90],[214,54,92],[255,107,53],[255,209,102]];
+  const x=Math.max(0,Math.min(1,v))*(stops.length-1);
+  const i=Math.floor(x), f=x-i, a=stops[i], b=stops[Math.min(i+1,stops.length-1)];
+  return `rgb(${a[0]+(b[0]-a[0])*f|0},${a[1]+(b[1]-a[1])*f|0},${a[2]+(b[2]-a[2])*f|0})`;
+}
+
+function pushSpec(spec){
+  const w=spectro.width, h=spectro.height, colW=2, bins=spec.length;
+  sctx.drawImage(spectro, colW, 0, w-colW, h, 0, 0, w-colW, h); // scroll left
+  const x0=w-colW, bh=h/bins;
+  for(let b=0;b<bins;b++){                     // low freq at bottom
+    sctx.fillStyle=heat(spec[b]);
+    sctx.fillRect(x0, h-(b+1)*bh, colW, bh+1);
+  }
+}
+
+function drawPortrait(){
+  const w=portrait.width, h=portrait.height, cx=w/2, cy=h/2;
+  pctx.clearRect(0,0,w,h);
+  pctx.strokeStyle='rgba(255,255,255,.06)'; pctx.lineWidth=1;
+  pctx.beginPath(); pctx.moveTo(cx,0); pctx.lineTo(cx,h); pctx.moveTo(0,cy); pctx.lineTo(w,cy); pctx.stroke();
+  const R=3.2, sc=Math.min(w,h)/(2*R);         // std-units to pixels
+  for(let i=0;i<embBuf.length;i++){
+    const p=embBuf[i], a=(i+1)/embBuf.length;
+    const px=cx+p[0]*sc, py=cy-p[1]*sc;
+    const teal=[46,196,182], hot=[255,209,102];
+    const col=teal.map((c,k)=>c+(hot[k]-c)*a|0);
+    pctx.fillStyle=`rgba(${col[0]},${col[1]},${col[2]},${0.15+0.85*a})`;
+    pctx.beginPath(); pctx.arc(px,py,i===embBuf.length-1?3.2:1.3+1.6*a,0,7); pctx.fill();
+  }
+}
 
 function push(p){
   buf.push(p);
@@ -168,6 +245,23 @@ function apply(d){
   }
   document.getElementById('sig').textContent =
     `rssi ${d.rssi.toFixed(1)} dBm  ·  fs ${d.fs.toFixed(1)} Hz`;
+
+  // latent axes
+  if (d.spec){ pushSpec(d.spec); }
+  if (d.embed){ embBuf.push(d.embed); if (embBuf.length>EMB_MAX) embBuf.shift(); drawPortrait(); }
+  if (d.bands){
+    for (const name of ['breathing','limb','fast']){
+      const pct = Math.round((d.bands[name]||0)*100);
+      const bar = document.querySelector(`.bar[data-b="${name}"]`);
+      const lbl = document.querySelector(`b[data-bv="${name}"]`);
+      if (bar) bar.style.setProperty('--w', Math.min(100, pct*1.6)+'%');
+      if (lbl) lbl.textContent = pct+'%';
+    }
+  }
+  if (d.tau && d.fs){
+    document.getElementById('tauLbl').textContent =
+      `s(t) vs s(t−τ)  ·  τ=${d.tau} samp (${(d.tau/d.fs).toFixed(2)}s)`;
+  }
 }
 
 function connect(){
@@ -176,7 +270,9 @@ function connect(){
   const status = document.getElementById('statusText');
   es.onopen = ()=>{ dot.classList.add('live');
     fetch('/meta').then(r=>r.json()).then(m=>{
-      status.textContent = `live · source: ${m.source}${m.backend? ' ('+m.backend+')':''}`;
+      status.textContent = `live · source: ${m.source}${m.backend? ' ('+m.backend+')':''}`
+        + (m.features? ' · latent axes on':'');
+      if (m.fmax){ document.getElementById('fmaxLbl').textContent = m.fmax+' Hz'; }
     }).catch(()=> status.textContent='live'); };
   es.onmessage = e=>{
     const msg = JSON.parse(e.data);
