@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WiFi-Sense — Live</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+  :root{
+    --bg0:#0b0a14; --bg1:#161226; --ember:#ff6b35; --hot:#ffd166;
+    --teal:#2ec4b6; --ui:#f4f1ea; --dim:#8a86a3; --bad:#ff3d6e;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:radial-gradient(ellipse at 50% -10%,var(--bg1),var(--bg0));
+       min-height:100vh;font-family:'Sora',sans-serif;color:var(--ui);padding:28px}
+  h1{font-size:26px;font-weight:800;letter-spacing:-.02em;
+     background:linear-gradient(100deg,var(--hot) 20%,var(--ember) 60%,var(--bad));
+     -webkit-background-clip:text;background-clip:text;color:transparent}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.5em;color:var(--teal)}
+  header{max-width:1080px;margin:0 auto 22px}
+  header .sub{color:var(--dim);font-size:13px;margin-top:6px}
+  .wrap{max-width:1080px;margin:0 auto;display:grid;grid-template-columns:2fr 1fr;gap:16px}
+  .card{background:rgba(22,18,38,.55);border:1px solid rgba(255,255,255,.07);
+        border-radius:14px;padding:18px;backdrop-filter:blur(8px)}
+  .card h2{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.25em;
+           color:var(--dim);text-transform:uppercase;margin-bottom:12px}
+  canvas{display:block;width:100%;border-radius:8px}
+  .stat{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+  .stat .val{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:700}
+  .stat .lbl{font-size:12px;color:var(--dim)}
+  .stat .val.big{font-size:40px}
+  .present{color:var(--teal)} .absent{color:var(--dim)}
+  .meter{height:10px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:6px}
+  .meter>i{display:block;height:100%;width:0;border-radius:999px;
+           background:linear-gradient(90deg,var(--teal),var(--hot),var(--ember));transition:width .12s}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--dim);
+       margin-right:8px;vertical-align:middle;box-shadow:0 0 0 0 rgba(46,196,182,.6)}
+  .dot.live{background:var(--teal);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,196,182,.5)}70%{box-shadow:0 0 0 10px rgba(46,196,182,0)}100%{box-shadow:0 0 0 0 rgba(46,196,182,0)}}
+  .conf{font-size:11px;color:var(--dim);font-family:'JetBrains Mono',monospace}
+  .footnote{max-width:1080px;margin:18px auto 0;color:var(--dim);font-size:12px;line-height:1.7}
+  code{font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,.06);padding:1px 6px;border-radius:5px;color:var(--hot)}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">WIFI-SENSE</div>
+  <h1>Channel Perturbation Monitor</h1>
+  <div class="sub"><span class="dot" id="liveDot"></span><span id="statusText">connecting…</span></div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <h2>RSSI stream &nbsp;·&nbsp; detrended fluctuation</h2>
+    <canvas id="trace" width="1400" height="420"></canvas>
+  </div>
+
+  <div>
+    <div class="card" style="margin-bottom:16px">
+      <h2>Presence</h2>
+      <div class="stat">
+        <div class="val big" id="presence">—</div>
+        <div class="lbl">debounced motion threshold</div>
+      </div>
+      <h2>Motion energy</h2>
+      <div class="meter"><i id="motionBar"></i></div>
+      <div class="conf" id="motionVal" style="margin-top:8px">0.00</div>
+    </div>
+
+    <div class="card">
+      <h2>Breathing estimate</h2>
+      <div class="stat">
+        <div class="val" id="bpm">—</div>
+        <div class="lbl">breaths / min &nbsp;<span class="conf" id="bpmConf"></span></div>
+      </div>
+      <h2>Signal</h2>
+      <div class="conf" id="sig">rssi — dBm &nbsp;·&nbsp; fs — Hz</div>
+    </div>
+  </div>
+</div>
+
+<div class="footnote">
+  Single-stream RSSI from your laptop's WiFi card. <b>Presence &amp; motion</b> are
+  reliable; <b>breathing</b> resolves only when a subject is close to the link and
+  still (low confidence is expected and honestly reported). For pose/silhouette you
+  need CSI hardware — the pipeline is built to accept it. Start with
+  <code>python -m wifi_sense --source synthetic</code> to see it move.
+</div>
+
+<script>
+const trace = document.getElementById('trace');
+const ctx = trace.getContext('2d');
+const buf = [];            // {rssi, motion, present}
+const MAX = 600;
+
+const css = getComputedStyle(document.documentElement);
+const C = k => css.getPropertyValue(k).trim();
+
+function push(p){
+  buf.push(p);
+  if (buf.length > MAX) buf.shift();
+}
+
+function draw(){
+  const w = trace.width, h = trace.height;
+  ctx.clearRect(0,0,w,h);
+  if (buf.length < 2){ requestAnimationFrame(draw); return; }
+
+  // baseline grid
+  ctx.strokeStyle = 'rgba(255,255,255,.05)';
+  ctx.lineWidth = 1;
+  for (let i=1;i<4;i++){ const y=h*i/4; ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke(); }
+
+  // autoscale RSSI
+  const vals = buf.map(b=>b.rssi);
+  let lo=Math.min(...vals), hi=Math.max(...vals);
+  if (hi-lo < 6){ const m=(hi+lo)/2; lo=m-3; hi=m+3; }
+  const pad=(hi-lo)*0.15; lo-=pad; hi+=pad;
+  const x = i => i/(MAX-1)*w;
+  const y = v => h - (v-lo)/(hi-lo)*h;
+
+  // motion shading under the curve
+  for (let i=0;i<buf.length;i++){
+    const m = buf[i].motion;
+    if (m>0.05){
+      ctx.fillStyle = `rgba(255,107,53,${Math.min(m,1)*0.18})`;
+      ctx.fillRect(x(i+ (MAX-buf.length)), 0, w/MAX+1, h);
+    }
+  }
+
+  // RSSI curve
+  ctx.beginPath();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = C('--teal');
+  buf.forEach((b,i)=>{
+    const px=x(i + (MAX-buf.length)), py=y(b.rssi);
+    i? ctx.lineTo(px,py) : ctx.moveTo(px,py);
+  });
+  ctx.stroke();
+
+  // leading dot
+  const last = buf[buf.length-1];
+  ctx.fillStyle = last.present ? C('--hot') : C('--dim');
+  ctx.beginPath();
+  ctx.arc(x(MAX-1), y(last.rssi), 4, 0, Math.PI*2);
+  ctx.fill();
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+function apply(d){
+  push({rssi:d.rssi, motion:d.motion, present:d.presence});
+  const pres = document.getElementById('presence');
+  pres.textContent = d.presence ? 'PRESENT' : 'clear';
+  pres.className = 'val big ' + (d.presence?'present':'absent');
+  document.getElementById('motionBar').style.width = Math.round(d.motion*100)+'%';
+  document.getElementById('motionVal').textContent = d.motion.toFixed(2);
+  const bpm = document.getElementById('bpm');
+  const conf = document.getElementById('bpmConf');
+  if (d.breathing_bpm && d.breathing_conf >= 0.2){
+    bpm.textContent = d.breathing_bpm.toFixed(0);
+    conf.textContent = '('+Math.round(d.breathing_conf*100)+'% conf)';
+  } else {
+    bpm.textContent = '—';
+    conf.textContent = '(low confidence)';
+  }
+  document.getElementById('sig').textContent =
+    `rssi ${d.rssi.toFixed(1)} dBm  ·  fs ${d.fs.toFixed(1)} Hz`;
+}
+
+function connect(){
+  const es = new EventSource('/stream');
+  const dot = document.getElementById('liveDot');
+  const status = document.getElementById('statusText');
+  es.onopen = ()=>{ dot.classList.add('live');
+    fetch('/meta').then(r=>r.json()).then(m=>{
+      status.textContent = `live · source: ${m.source}${m.backend? ' ('+m.backend+')':''}`;
+    }).catch(()=> status.textContent='live'); };
+  es.onmessage = e=>{
+    const msg = JSON.parse(e.data);
+    if (msg.type==='backlog'){ msg.items.forEach(apply); }
+    else if (msg.type==='sample'){ apply(msg); }
+  };
+  es.onerror = ()=>{ dot.classList.remove('live'); status.textContent='reconnecting…'; };
+}
+connect();
+</script>
+</body>
+</html>
