@@ -28,6 +28,8 @@
   .blk{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-bottom:5px}
   canvas{display:block;width:100%;border-radius:6px}
   .cap{font-size:11px;color:var(--dim);margin-top:5px}
+  .why{font-size:12.5px;color:var(--ink);opacity:.9;line-height:1.55;
+       border-top:1px solid var(--line);padding-top:11px}
   .leg{display:flex;gap:12px;justify-content:center;margin-top:20px;font-size:12px;color:var(--dim);flex-wrap:wrap}
   .leg span{display:inline-flex;align-items:center;gap:6px}
   .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
@@ -58,10 +60,13 @@
         <div class="chip">present <b>100%</b></div>
         <div class="chip">breath <b>16.0 bpm</b></div>
       </div>
-      <div><div class="blk">signal · RSSI (dBm)</div><canvas id="tr_wifi" height="70"></canvas></div>
-      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_wifi" height="90"></canvas></div>
+      <div><div class="blk">signal · RSSI (dBm)</div><canvas id="tr_wifi" height="70"></canvas>
+        <div class="cap">the raw value over time (shaded = scene phase)</div></div>
+      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_wifi" height="90"></canvas>
+        <div class="cap">bright = motion energy; low band = breathing</div></div>
       <div><div class="blk">phase portrait</div><canvas id="pp_wifi" height="150"></canvas>
-        <div class="cap">dot / loop / cloud</div></div>
+        <div class="cap">dot = empty · loop = breathing · cloud = walking</div></div>
+      <p class="why">Signal strength to your router. Nearly flat when the room is empty, jittery when someone's near, wild swings when they cross the link. The spectrogram is faint and smeary (low signal-to-noise) and the phase portrait is a loose blob — passive RSSI is noisy. Great for “someone’s here / moving,” weak on fine detail.</p>
     </div>
     <div class="col">
       <div>
@@ -73,10 +78,13 @@
         <div class="chip">present <b>83%</b></div>
         <div class="chip">breath <b>16.0 bpm</b></div>
       </div>
-      <div><div class="blk">signal · Doppler (signed)</div><canvas id="tr_sonar" height="70"></canvas></div>
-      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_sonar" height="90"></canvas></div>
+      <div><div class="blk">signal · Doppler (signed)</div><canvas id="tr_sonar" height="70"></canvas>
+        <div class="cap">the raw value over time (shaded = scene phase)</div></div>
+      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_sonar" height="90"></canvas>
+        <div class="cap">bright = motion energy; low band = breathing</div></div>
       <div><div class="blk">phase portrait</div><canvas id="pp_sonar" height="150"></canvas>
-        <div class="cap">dot / loop / cloud</div></div>
+        <div class="cap">dot = empty · loop = breathing · cloud = walking</div></div>
+      <p class="why">The device emits an inaudible tone and watches the Doppler shift of its own echo. Because we control the signal, the breathing loop is the cleanest of the four and the low breathing stripe in the spectrogram is crisp. The value is signed: above zero = motion toward the mic, below = away — so it alone senses direction.</p>
     </div>
     <div class="col">
       <div>
@@ -88,10 +96,13 @@
         <div class="chip">present <b>100%</b></div>
         <div class="chip">breath <b>19.1 bpm</b></div>
       </div>
-      <div><div class="blk">signal · BLE RSSI (dBm)</div><canvas id="tr_ble" height="70"></canvas></div>
-      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_ble" height="90"></canvas></div>
+      <div><div class="blk">signal · BLE RSSI (dBm)</div><canvas id="tr_ble" height="70"></canvas>
+        <div class="cap">the raw value over time (shaded = scene phase)</div></div>
+      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_ble" height="90"></canvas>
+        <div class="cap">bright = motion energy; low band = breathing</div></div>
       <div><div class="blk">phase portrait</div><canvas id="pp_ble" height="150"></canvas>
-        <div class="cap">dot / loop / cloud</div></div>
+        <div class="cap">dot = empty · loop = breathing · cloud = walking</div></div>
+      <p class="why">Same idea as WiFi, on the Bluetooth radio — tracking a nearby advertiser’s signal strength. Coarser and noisier (BLE updates slower and quantizes hard), so presence and gross motion read fine but breathing is unreliable. Value here is a rough head-count artifact of the sim; treat it as a second, independent radio channel.</p>
     </div>
     <div class="col">
       <div>
@@ -103,10 +114,13 @@
         <div class="chip">present <b>50%</b></div>
         <div class="chip">breath <b>24.0 bpm</b></div>
       </div>
-      <div><div class="blk">signal · range (m)</div><canvas id="tr_lidar" height="70"></canvas></div>
-      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_lidar" height="90"></canvas></div>
+      <div><div class="blk">signal · range (m)</div><canvas id="tr_lidar" height="70"></canvas>
+        <div class="cap">the raw value over time (shaded = scene phase)</div></div>
+      <div><div class="blk">spectrogram · time × freq</div><canvas id="sp_lidar" height="90"></canvas>
+        <div class="cap">bright = motion energy; low band = breathing</div></div>
       <div><div class="blk">phase portrait</div><canvas id="pp_lidar" height="150"></canvas>
-        <div class="cap">dot / loop / cloud</div></div>
+        <div class="cap">dot = empty · loop = breathing · cloud = walking</div></div>
+      <p class="why">The only sensor whose raw value is a real distance in metres. The line drops from ~3.2 m (empty far wall) to ~1.4 m when a person stands close — occupancy you can read as depth. Its phase portrait sits in a different place for “person near” vs “empty,” carrying coarse position no RF sensor here has. iPhone/iPad Pro only.</p>
     </div>
   </div>
 
