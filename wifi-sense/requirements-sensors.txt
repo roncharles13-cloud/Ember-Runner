@@ -1,0 +1,7 @@
+# Optional extras for the real (non-synthetic) multi-sensor sources.
+# Core sensing needs only numpy (see requirements.txt); install these per sensor.
+
+sounddevice>=0.4   # --source sonar  (acoustic Doppler via speaker + mic; needs PortAudio)
+bleak>=0.21        # --source ble     (Bluetooth LE RSSI scanning)
+# --source lidar has no extra deps: it ingests a UDP depth stream from an
+# iPhone/iPad Pro companion (ARKit). See README.

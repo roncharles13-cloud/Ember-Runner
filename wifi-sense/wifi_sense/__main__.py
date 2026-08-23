@@ -20,10 +20,15 @@ from .sources import make_source
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="wifi_sense",
                                 description="Laptop-only WiFi sensing (RSSI tier).")
-    p.add_argument("--source", choices=["rssi", "synthetic", "replay"],
-                   default="rssi", help="signal source (default: rssi)")
+    from .sources import KINDS
+    p.add_argument("--source", choices=KINDS, default="rssi",
+                   metavar="SRC",
+                   help="signal source: " + ", ".join(KINDS) + " (default: rssi)")
     p.add_argument("--file", help="CSV file for --source replay")
     p.add_argument("--loop", action="store_true", help="loop the replay file")
+    p.add_argument("--ble-address", help="target BLE device address for --source ble")
+    p.add_argument("--udp-port", type=int, default=9099,
+                   help="UDP port for --source lidar depth stream (default: 9099)")
     p.add_argument("--hz", type=float, default=20.0,
                    help="target sample rate (default: 20)")
     p.add_argument("--record", metavar="CSV",
@@ -43,6 +48,7 @@ def main(argv=None) -> int:
         source = make_source(
             args.source, hz=args.hz,
             path=args.file, loop=args.loop,
+            address=args.ble_address, port=args.udp_port,
         )
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
