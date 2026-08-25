@@ -1,6 +1,0 @@
-# Optional extras for the real (non-synthetic) multi-sensor sources.
-# Core sensing needs only numpy (see requirements.txt); install these per sensor.
-
-bleak>=0.21        # --source ble  /  --source radar   (Bluetooth LE scanning)
-# --source lidar has no extra deps: it ingests a UDP depth stream from an
-# iPhone/iPad Pro companion (ARKit). See README.
