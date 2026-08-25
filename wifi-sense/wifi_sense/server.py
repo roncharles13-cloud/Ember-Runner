@@ -25,6 +25,37 @@ from .features import FMAX_HZ, NBINS, FeatureEngine
 STATIC = Path(__file__).parent / "static"
 
 
+def lan_ip() -> Optional[str]:
+    """Best-effort LAN IP of this machine (no packets actually sent)."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def print_banner(title: str, host: str, port: int, extra: str = "") -> None:
+    """Print the local URL, and — when bound to all interfaces — the phone URL."""
+    print(f"\n  {title}")
+    print(f"  this device:  http://localhost:{port}")
+    if host == "0.0.0.0":
+        ip = lan_ip()
+        if ip:
+            print(f"  your phone:   http://{ip}:{port}   "
+                  "(same Wi-Fi; allow the firewall prompt)")
+        else:
+            print("  your phone:   bound to 0.0.0.0 but LAN IP not found")
+    else:
+        print("  (localhost only — add --lan to open it on your phone)")
+    if extra:
+        print(f"  {extra}")
+    print("  Ctrl-C to stop\n")
+
+
 class Hub:
     """Fan-out of results to connected SSE clients."""
 
@@ -195,11 +226,9 @@ def serve(source, engine: SenseEngine, host: str, port: int,
     cap = CaptureThread(source, engine, hub, recorder, features)
     cap.start()
     httpd = ThreadingHTTPServer((host, port), make_handler(hub, meta))
-    url = f"http://{host if host != '0.0.0.0' else 'localhost'}:{port}"
-    print(f"\n  WiFi-Sense dashboard  ->  {url}")
-    print(f"  source: {source.name}"
-          + (f" ({source.backend})" if getattr(source, 'backend', None) else "")
-          + "   (Ctrl-C to stop)\n")
+    backend = getattr(source, "backend", None)
+    print_banner("WiFi-Sense dashboard", host, port,
+                 extra=f"source: {source.name}" + (f" ({backend})" if backend else ""))
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

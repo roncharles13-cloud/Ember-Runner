@@ -38,12 +38,18 @@ def main(argv=None) -> int:
     p.add_argument("--record", metavar="CSV",
                    help="save raw RSSI to a CSV while running")
     p.add_argument("--host", default="127.0.0.1")
+    p.add_argument("--lan", action="store_true",
+                   help="listen on all interfaces so you can open it from your phone "
+                        "on the same Wi-Fi (binds 0.0.0.0)")
     p.add_argument("--port", type=int, default=87 * 100 + 65)  # 8765
     p.add_argument("--window", type=float, default=30.0,
                    help="analysis window seconds (default: 30)")
     p.add_argument("--no-features", action="store_true",
                    help="disable spectrogram + delay-embedding features")
     args = p.parse_args(argv)
+
+    if args.lan:
+        args.host = "0.0.0.0"
 
     if args.source == "replay" and not args.file:
         p.error("--source replay requires --file")

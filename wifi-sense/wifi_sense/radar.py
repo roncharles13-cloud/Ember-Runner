@@ -280,9 +280,9 @@ def serve_radar(scanner, host: str, port: int) -> None:
                 hub.unsubscribe(q)
 
     httpd = ThreadingHTTPServer((host, port), Handler)
-    url = f"http://{host if host != '0.0.0.0' else 'localhost'}:{port}"
-    print(f"\n  WiFi-Sense RF radar  ->  {url}")
-    print(f"  source: {scanner.name}   (passive BLE · presence not identity · Ctrl-C to stop)\n")
+    from .server import print_banner
+    print_banner("WiFi-Sense RF radar", host, port,
+                 extra=f"source: {scanner.name}  ·  passive BLE · presence not identity")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

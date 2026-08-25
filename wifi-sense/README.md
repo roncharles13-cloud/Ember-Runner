@@ -12,6 +12,23 @@ python -m wifi_sense                       # live, from your laptop's WiFi card
 ```
 Then open the URL it prints (default <http://127.0.0.1:8765>).
 
+### View it on your phone
+
+The sensing runs on this computer; your phone is just the screen — no app, nothing
+installed, nothing changed on the phone. Add `--lan` and open the printed URL on a
+phone on the **same Wi-Fi**:
+
+```
+python -m wifi_sense --source radar-sim --lan
+#   this device:  http://localhost:8765
+#   your phone:   http://192.168.x.y:8765   (same Wi-Fi; allow the firewall prompt)
+```
+
+This works for every mode, including the RF radar. Note the phone *displays* the
+radar — it can't scan BLE itself (browsers can't, and iOS hides Apple beacons from
+apps); the laptop does the scanning. Acoustic **sonar** is the one sensor that can
+run natively in a phone browser (Web Audio + mic).
+
 ---
 
 ## Not just WiFi: one pipeline, many sensors
