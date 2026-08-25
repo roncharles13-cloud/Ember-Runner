@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Pocket Sonar</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+  :root{--bg:#060a10;--panel:#0c141d;--line:rgba(120,210,255,.13);
+    --cyan:#5fe6ff;--teal:#2ec4b6;--ember:#ff6b35;--hot:#ffd166;--ink:#eaf6ff;--dim:#6d8496;--warn:#ff5d7a;}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{background:radial-gradient(130% 90% at 50% 0%,#0d1a26,var(--bg) 62%);min-height:100vh;color:var(--ink);
+    font-family:'Sora',system-ui,sans-serif;padding:16px;padding-bottom:40px}
+  .shell{max-width:560px;margin:0 auto}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.35em;color:var(--cyan);text-transform:uppercase}
+  h1{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+  .sub{color:var(--dim);font-size:13px;margin-top:6px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:15px;margin-top:14px}
+  button{font-family:'Sora';font-weight:600;font-size:16px;letter-spacing:.02em;border:none;border-radius:12px;
+    padding:15px 22px;cursor:pointer;color:#04121a;background:linear-gradient(100deg,var(--cyan),var(--teal));
+    box-shadow:0 8px 30px rgba(95,230,255,.3);width:100%}
+  button.stop{background:linear-gradient(100deg,var(--warn),#ff8a5d);color:#1a0710}
+  button:disabled{opacity:.5}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;position:relative;overflow:hidden}
+  .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--cyan))}
+  .stat .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--dim)}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:26px;margin-top:5px}
+  .stat .u{font-size:12px;color:var(--dim);font-weight:400}
+  .present .v{color:var(--teal)} .absent .v{color:var(--dim)}
+  .meter{height:9px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:8px}
+  .meter>i{display:block;height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--teal),var(--cyan),var(--ember));transition:width .1s}
+  h2{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim);margin-bottom:9px}
+  canvas{display:block;width:100%;border-radius:8px}
+  .ctrls{display:flex;flex-direction:column;gap:12px;margin-top:6px}
+  .ctrl{display:flex;align-items:center;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--dim)}
+  .ctrl label{flex:none;width:90px} .ctrl input{flex:1}
+  .ctrl b{color:var(--ink);width:64px;text-align:right}
+  input[type=range]{accent-color:var(--cyan)}
+  .status{font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:10px;color:var(--dim)}
+  .status.err{color:var(--warn)} .status.ok{color:var(--teal)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:11px;color:var(--dim)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:12px;height:4px;border-radius:2px;display:inline-block}
+  .note{color:var(--dim);font-size:11.5px;line-height:1.7;margin-top:14px;border-left:2px solid var(--cyan);padding-left:11px}
+  .note b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="eyebrow">WiFi-Sense · pocket sonar</div>
+  <h1>Room sensing, from your phone</h1>
+  <div class="sub">Your phone plays an inaudible tone and listens to its own echo. Motion in the room Doppler-shifts
+    it — that's presence, motion, and breathing, sensed entirely on this device.</div>
+
+  <div class="card">
+    <button id="go">▶ Start sensing</button>
+    <div class="status" id="status">Tap start — you'll be asked for microphone access (needed to hear the echo).</div>
+  </div>
+
+  <div class="grid">
+    <div class="stat present" id="presCard" style="--accent:var(--teal)"><div class="k">Presence</div><div class="v" id="pres">—</div></div>
+    <div class="stat" style="--accent:var(--ember)"><div class="k">Motion</div><div class="v" id="motion">0.00<span class="u"> /1</span></div>
+      <div class="meter"><i id="motionBar"></i></div></div>
+    <div class="stat" style="--accent:var(--hot)"><div class="k">Breathing</div><div class="v" id="bpm">—<span class="u"> bpm</span></div></div>
+    <div class="stat" style="--accent:var(--cyan)"><div class="k">Direction</div><div class="v" id="dir">—</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Doppler sonar scope</h2>
+    <canvas id="scope" height="220"></canvas>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--cyan)"></i>carrier tone</span>
+      <span><i class="sw" style="background:var(--ember)"></i>Doppler sidebands = motion</span>
+      <span style="color:var(--dim)">↑ toward · ↓ away</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Motion over time</h2>
+    <canvas id="trace" height="120"></canvas>
+  </div>
+
+  <div class="card">
+    <h2>Tuning</h2>
+    <div class="ctrls">
+      <div class="ctrl"><label>Tone</label><input id="freq" type="range" min="17000" max="21000" step="250" value="18500"><b id="freqV">18.5 kHz</b></div>
+      <div class="ctrl"><label>Volume</label><input id="vol" type="range" min="1" max="20" step="1" value="7"><b id="volV">7%</b></div>
+      <div class="ctrl"><label>Sensitivity</label><input id="sens" type="range" min="1" max="10" step="1" value="5"><b id="sensV">5</b></div>
+    </div>
+    <div class="note">
+      <b>All on your phone — no network, no one else's data.</b> It emits a faint ~18 kHz tone (most adults can't hear
+      it; pets and kids sometimes can). Works best a few feet from a wall, in a not-too-noisy room. It senses
+      <b>motion, not identity</b>. Needs mic permission and a secure (https) page. If breathing won't lock, sit still
+      and close to the phone for ~20 s.
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let ac,osc,gain,analyser,micStream,running=false;
+let f0=18500, bins=null, sr=48000;
+const traceBuf=[], specCols=[], SPEC_MAX=240;
+let motionRef=1e-3, present=false, lastMotionT=0;
+const bhist=[];               // {t, val} for breathing FFT
+let raf=0;
+
+function heat(v){const s=[[6,10,16],[18,50,70],[40,120,150],[95,230,255],[255,150,60],[255,209,102]];
+  const x=Math.max(0,Math.min(1,v))*(s.length-1),i=Math.floor(x),f=x-i,a=s[i],b=s[Math.min(i+1,s.length-1)];
+  return `rgb(${a[0]+(b[0]-a[0])*f|0},${a[1]+(b[1]-a[1])*f|0},${a[2]+(b[2]-a[2])*f|0})`;}
+function dpr(cv){const r=Math.min(devicePixelRatio||1,2),w=cv.clientWidth,h=cv.height;
+  cv.width=w*r;cv.style.height=h+'px';const x=cv.getContext('2d');x.setTransform(r,0,0,r,0,0);return {x,w,h};}
+
+async function start(){
+  try{
+    ac=new (window.AudioContext||window.webkitAudioContext)();
+    await ac.resume();
+    sr=ac.sampleRate;
+    // emit carrier
+    osc=ac.createOscillator();osc.type='sine';osc.frequency.value=f0;
+    gain=ac.createGain();gain.gain.value=(+$('vol').value)/100;
+    osc.connect(gain).connect(ac.destination);osc.start();
+    // mic — disable processing that would fight our tone
+    micStream=await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+    const src=ac.createMediaStreamSource(micStream);
+    analyser=ac.createAnalyser();analyser.fftSize=16384;analyser.smoothingTimeConstant=0;
+    src.connect(analyser);
+    computeBins();
+    running=true;$('go').textContent='■ Stop';$('go').classList.add('stop');
+    setStatus('sensing — move your hand near the phone to see the sidebands light up','ok');
+    loop();
+  }catch(e){
+    setStatus('could not start: '+e.message+' — needs mic permission on an https page','err');
+  }
+}
+function stop(){
+  running=false;cancelAnimationFrame(raf);
+  try{osc.stop();}catch(e){}
+  if(micStream)micStream.getTracks().forEach(t=>t.stop());
+  if(ac)ac.close();
+  $('go').textContent='▶ Start sensing';$('go').classList.remove('stop');
+  setStatus('stopped.','');
+}
+function setStatus(t,c){const s=$('status');s.textContent=t;s.className='status'+(c?' '+c:'');}
+
+function computeBins(){
+  const binHz=sr/analyser.fftSize;
+  const guard=40, band=700;               // Hz: skip ±40 around carrier, analyze out to ±700
+  const c=Math.round(f0/binHz);
+  bins={binHz,c,
+    upLo:Math.round((f0+guard)/binHz),upHi:Math.round((f0+band)/binHz),
+    dnHi:Math.round((f0-guard)/binHz),dnLo:Math.round((f0-band)/binHz),
+    specLo:Math.round((f0-band)/binHz),specHi:Math.round((f0+band)/binHz)};
+}
+
+function analyze(){
+  const N=analyser.frequencyBinCount, db=new Float32Array(N);
+  analyser.getFloatFrequencyData(db);
+  const lin=i=>Math.pow(10,db[i]/10);
+  let up=0,dn=0,carrier=0;
+  for(let i=bins.upLo;i<=bins.upHi;i++)up+=lin(i);
+  for(let i=bins.dnLo;i<=bins.dnHi;i++)dn+=lin(i);
+  for(let i=bins.c-2;i<=bins.c+2;i++)carrier+=lin(i);
+  const side=up+dn, sens=+$('sens').value;
+  const motionRaw=Math.sqrt(side/(carrier+1e-12))*sens*0.5;   // reflected energy vs carrier
+  const signed=(up-dn)/(side+1e-12);                          // + = toward, - = away
+  // adaptive presence (self-calibrating floor)
+  motionRef=0.995*motionRef+0.005*Math.max(motionRaw,1e-3);
+  const motion=Math.max(0,Math.min(1,motionRaw/(motionRef*3+0.05)));
+  const now=performance.now()/1000;
+  if(motion>=0.14){present=true;lastMotionT=now;}
+  else if(motion<0.07&&now-lastMotionT>3)present=false;
+  // spectrogram column (band around carrier)
+  const col=[];let mx=-140,mn=-90;
+  for(let i=bins.specLo;i<=bins.specHi;i++){col.push(db[i]);}
+  const colN=col.map(v=>Math.max(0,Math.min(1,(v-mn)/(mx-mn))));
+  specCols.push(colN);if(specCols.length>SPEC_MAX)specCols.shift();
+  // buffers
+  traceBuf.push({m:motion,s:signed,present});if(traceBuf.length>SPEC_MAX)traceBuf.shift();
+  bhist.push({t:now,v:signed});const cut=now-24;while(bhist.length&&bhist[0].t<cut)bhist.shift();
+  return {motion,signed,present};
+}
+
+function breathing(){
+  if(bhist.length<80)return null;
+  const t0=bhist[0].t,t1=bhist[bhist.length-1].t,span=t1-t0;
+  if(span<10)return null;
+  const fs=bhist.length/span; const n=bhist.length;
+  // detrend
+  const mean=bhist.reduce((s,x)=>s+x.v,0)/n;
+  const x=bhist.map(p=>p.v-mean);
+  // brute DFT over breathing band 0.12..0.6 Hz
+  let best=0,bf=0;
+  for(let f=0.12;f<=0.6;f+=0.01){let re=0,im=0;
+    for(let i=0;i<n;i++){const a=2*Math.PI*f*(i/fs);re+=x[i]*Math.cos(a);im-=x[i]*Math.sin(a);}
+    const p=re*re+im*im;if(p>best){best=p;bf=f;}}
+  // crude confidence vs mean band power
+  const bpm=bf*60;return (bpm>=7&&bpm<=36)?bpm:null;
+}
+
+function drawScope(){
+  const cv=$('scope');const {x,w,h}=dpr(cv);x.clearRect(0,0,w,h);
+  const n=specCols.length;if(!n){return;}
+  const cw=w/SPEC_MAX, bh=h/(specCols[0].length||1);
+  for(let c=0;c<n;c++){const col=specCols[c];for(let b=0;b<col.length;b++){
+    x.fillStyle=heat(col[b]);x.fillRect((SPEC_MAX-n+c)*cw,h-(b+1)*bh,cw+1,bh+1);}}
+  // carrier centre line
+  x.strokeStyle='rgba(95,230,255,.5)';x.lineWidth=1;x.beginPath();x.moveTo(0,h/2);x.lineTo(w,h/2);x.stroke();
+  x.fillStyle='rgba(109,132,150,.9)';x.font='10px JetBrains Mono, monospace';x.textAlign='left';
+  x.fillText('+700 Hz (toward)',4,12);x.fillText('carrier',4,h/2-4);x.fillText('-700 Hz (away)',4,h-6);
+}
+function drawTrace(){
+  const cv=$('trace');const {x,w,h}=dpr(cv);x.clearRect(0,0,w,h);
+  const n=traceBuf.length;if(n<2)return;
+  x.strokeStyle='rgba(255,255,255,.05)';for(let i=1;i<3;i++){const y=h*i/3;x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();}
+  for(let i=0;i<n;i++){const m=traceBuf[i].m;if(m>.06){x.fillStyle=`rgba(255,107,53,${Math.min(m,1)*.25})`;
+    x.fillRect((SPEC_MAX-n+i)*(w/SPEC_MAX),0,w/SPEC_MAX+1,h);}}
+  x.beginPath();x.lineWidth=1.8;x.strokeStyle='#5fe6ff';
+  traceBuf.forEach((p,i)=>{const px=(SPEC_MAX-n+i)*(w/SPEC_MAX),py=h-p.m*h;i?x.lineTo(px,py):x.moveTo(px,py);});
+  x.stroke();
+}
+
+let frame=0;
+function loop(){
+  if(!running)return;
+  const r=analyze();frame++;
+  if(frame%2===0){
+    $('motion').innerHTML=r.motion.toFixed(2)+'<span class="u"> /1</span>';
+    $('motionBar').style.width=Math.round(r.motion*100)+'%';
+    const pc=$('presCard');$('pres').textContent=r.present?'PRESENT':'clear';
+    pc.className='stat '+(r.present?'present':'absent');
+    $('dir').textContent=Math.abs(r.signed)<0.08?'·':(r.signed>0?'toward ↑':'away ↓');
+    const bpm=breathing();
+    $('bpm').innerHTML=(bpm?bpm.toFixed(0):'—')+'<span class="u"> bpm</span>';
+    drawScope();drawTrace();
+  }
+  raf=requestAnimationFrame(loop);
+}
+
+// controls
+$('freq').oninput=e=>{f0=+e.target.value;$('freqV').textContent=(f0/1000).toFixed(1)+' kHz';
+  if(osc){osc.frequency.value=f0;computeBins();}};
+$('vol').oninput=e=>{$('volV').textContent=e.target.value+'%';if(gain)gain.gain.value=(+e.target.value)/100;};
+$('sens').oninput=e=>{$('sensV').textContent=e.target.value;};
+$('go').onclick=()=>{running?stop():start();};
+
+if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){
+  setStatus('this browser can’t access the microphone — open on a phone/desktop browser over https','err');
+  $('go').disabled=true;
+}else if(!window.isSecureContext){
+  setStatus('needs a secure (https) page for mic access — see the note below','err');
+}
+</script>
+</body>
+</html>

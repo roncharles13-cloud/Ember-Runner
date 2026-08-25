@@ -29,6 +29,16 @@ radar — it can't scan BLE itself (browsers can't, and iOS hides Apple beacons 
 apps); the laptop does the scanning. Acoustic **sonar** is the one sensor that can
 run natively in a phone browser (Web Audio + mic).
 
+### Pocket Sonar — room sensing on the phone itself
+
+`wifi_sense/static/sonar-phone.html` is a standalone page that turns the phone into
+an active sonar: it plays an inaudible ~18 kHz tone through the speaker and reads the
+Doppler-shifted echo off the mic, giving live **motion / presence / breathing** and a
+Doppler scope — entirely on-device, no server and no one else's data. It needs mic
+permission and a **secure (https) context**, so open it over https (e.g. published as
+an artifact) or from `localhost`; plain `http://<lan-ip>` won't grant the mic. It
+emits a faint tone (uses the speaker) and senses **motion, not identity**.
+
 ---
 
 ## Not just WiFi: one pipeline, many sensors
