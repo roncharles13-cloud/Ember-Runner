@@ -1,6 +1,6 @@
 """RF device radar — light up nearby BLE-advertising devices.
 
-This is NOT acoustic sonar and NOT the room-sensing scalar pipeline. It is a
+This is NOT the room-sensing scalar pipeline. It is a
 passive listener for the Bluetooth-LE advertisements that phones, watches,
 earbuds, and beacons broadcast constantly. Each advertising device becomes a
 blip; Apple devices are flagged by their company-ID beacon (the same signal the

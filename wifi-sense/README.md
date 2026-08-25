@@ -25,19 +25,7 @@ python -m wifi_sense --source radar-sim --lan
 ```
 
 This works for every mode, including the RF radar. Note the phone *displays* the
-radar — it can't scan BLE itself (browsers can't, and iOS hides Apple beacons from
-apps); the laptop does the scanning. Acoustic **sonar** is the one sensor that can
-run natively in a phone browser (Web Audio + mic).
-
-### Pocket Sonar — room sensing on the phone itself
-
-`wifi_sense/static/sonar-phone.html` is a standalone page that turns the phone into
-an active sonar: it plays an inaudible ~18 kHz tone through the speaker and reads the
-Doppler-shifted echo off the mic, giving live **motion / presence / breathing** and a
-Doppler scope — entirely on-device, no server and no one else's data. It needs mic
-permission and a **secure (https) context**, so open it over https (e.g. published as
-an artifact) or from `localhost`; plain `http://<lan-ip>` won't grant the mic. It
-emits a faint tone (uses the speaker) and senses **motion, not identity**.
+dashboard — the laptop does the sensing/scanning.
 
 ---
 
@@ -52,24 +40,17 @@ no hardware, so you can see it work first.
 | `--source` | Sensor | Value it emits | Needs |
 |---|---|---|---|
 | `rssi` | laptop WiFi card | signal strength (dBm) | nothing |
-| `sonar` | speaker + mic | acoustic Doppler imbalance (~0 at rest) | `sounddevice` |
 | `ble` | Bluetooth LE | advertiser RSSI (dBm) | `bleak` |
 | `lidar` | iPhone/iPad Pro depth | measured range (metres) | UDP feed from the device |
-| `sonar-sim` / `ble-sim` / `lidar-sim` | — | simulated versions of the above | nothing |
+| `ble-sim` / `lidar-sim` | — | simulated versions of the above | nothing |
 
 ```
 pip install -r requirements-sensors.txt     # only for the real sources
 
-python -m wifi_sense --source sonar-sim      # inaudible-tone Doppler, no hardware
-python -m wifi_sense --source sonar          # real: plays ~19 kHz, reads the mic
 python -m wifi_sense --source ble            # track the strongest BLE advertiser
 python -m wifi_sense --source ble --ble-address AA:BB:CC:DD:EE:FF
 python -m wifi_sense --source lidar --udp-port 9099   # ingest iPhone depth
 ```
-
-**Why sonar is the strong one:** we *emit* the probe (a ~19 kHz tone you can't
-hear) instead of eavesdropping, so SNR is high and the sample rate is ~48 kHz.
-Motion Doppler-shifts the echo; the sign even tells you *toward* vs *away*.
 
 **LiDAR** is the only sensor here that also carries coarse depth/position, not
 just "something moved" — but it's Pro-iPhone-only. Feed it by having a small

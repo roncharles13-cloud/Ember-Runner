@@ -8,7 +8,6 @@ from wifi_sense.dsp import SenseEngine
 from wifi_sense.sources import KINDS, make_source
 from wifi_sense.sources.ble import SyntheticBLESource
 from wifi_sense.sources.lidar import SyntheticLidarSource, _parse
-from wifi_sense.sources.sonar import SyntheticSonarSource
 
 
 def _first_n(src, n):
@@ -17,20 +16,10 @@ def _first_n(src, n):
 
 
 def test_factory_knows_all_kinds():
-    assert {"sonar-sim", "ble-sim", "lidar-sim"} <= set(KINDS)
-    for k in ("sonar-sim", "ble-sim", "lidar-sim"):
+    assert {"ble-sim", "lidar-sim"} <= set(KINDS)
+    for k in ("ble-sim", "lidar-sim"):
         s = make_source(k, seed=1)
         assert hasattr(s, "samples") and s.name == k
-
-
-def test_sonar_rest_near_zero_motion_on_walk():
-    src = SyntheticSonarSource(hz=20.0, seed=0)
-    raw = _first_n(src, 20 * 40)          # one full scene
-    vals = [v for _, v in raw]
-    # empty stretch (0-7s) small; walking stretch (24-34s) large swings
-    empty = vals[0:20 * 6]
-    walk = vals[20 * 25:20 * 33]
-    assert max(abs(x) for x in walk) > 3 * (max(abs(x) for x in empty) + 1e-6)
 
 
 def test_ble_baseline_and_motion():
@@ -56,10 +45,10 @@ def test_lidar_parse_formats():
     assert _parse(b"garbage") is None
 
 
-def test_sonar_flows_through_sense_engine():
-    src = SyntheticSonarSource(hz=20.0, seed=0)
+def test_ble_flows_through_sense_engine():
+    src = SyntheticBLESource(hz=15.0, seed=0)
     eng = SenseEngine()
     res = None
-    for i, (_, v) in enumerate(itertools.islice(src._raw(), 20 * 30)):
-        res = eng.add(v, i / 20.0)
-    assert 0.0 <= res.motion <= 1.0    # pipeline consumes the sonar stream fine
+    for i, (_, v) in enumerate(itertools.islice(src._raw(), 15 * 30)):
+        res = eng.add(v, i / 15.0)
+    assert 0.0 <= res.motion <= 1.0    # pipeline consumes the BLE stream fine
