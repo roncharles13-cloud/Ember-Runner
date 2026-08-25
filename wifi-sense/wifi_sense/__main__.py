@@ -21,9 +21,13 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="wifi_sense",
                                 description="Laptop-only WiFi sensing (RSSI tier).")
     from .sources import KINDS
-    p.add_argument("--source", choices=KINDS, default="rssi",
+    radar_kinds = ["radar", "radar-sim"]
+    all_kinds = KINDS + radar_kinds
+    p.add_argument("--source", choices=all_kinds, default="rssi",
                    metavar="SRC",
-                   help="signal source: " + ", ".join(KINDS) + " (default: rssi)")
+                   help="signal source: " + ", ".join(KINDS)
+                        + "; or RF device radar: " + ", ".join(radar_kinds)
+                        + " (default: rssi)")
     p.add_argument("--file", help="CSV file for --source replay")
     p.add_argument("--loop", action="store_true", help="loop the replay file")
     p.add_argument("--ble-address", help="target BLE device address for --source ble")
@@ -43,6 +47,17 @@ def main(argv=None) -> int:
 
     if args.source == "replay" and not args.file:
         p.error("--source replay requires --file")
+
+    # RF device radar is a different mode (device snapshots, not a scalar stream)
+    if args.source in radar_kinds:
+        from .radar import make_scanner, serve_radar
+        try:
+            scanner = make_scanner(args.source, hz=args.hz)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
+        serve_radar(scanner, args.host, args.port)
+        return 0
 
     try:
         source = make_source(

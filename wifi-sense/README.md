@@ -51,6 +51,32 @@ reading per UDP datagram: a bare number in metres, or `{"range": 1.83}`.
 
 ---
 
+## RF device radar — light up nearby phones
+
+A different mode entirely (not the scalar room-sensing pipeline): a passive
+listener for the Bluetooth-LE advertisements phones/watches/earbuds broadcast.
+Each advertising device becomes a blip on a sweeping radar; Apple devices are
+flagged by their company-ID beacon (the same signal AirDrop/Continuity uses).
+
+```
+python -m wifi_sense --source radar-sim   # animated demo, no hardware
+python -m wifi_sense --source radar        # live BLE scan (needs bleak + adapter)
+```
+
+**Honest, enforced limits** — this deliberately does *not* try to defeat privacy:
+
+- **Presence, not identity.** iOS/Android randomize the advertised MAC ~every 15
+  min, so each device id is ephemeral. You see *a device*, never *who*, and can't
+  track anyone over time. No rotation-correlation, no de-anonymization.
+- **Distance, not direction.** One antenna gives RSSI (rough range) but no
+  bearing, so blip angle is arbitrary (and labelled as such).
+- **Only advertising devices** appear — a phone that isn't broadcasting is invisible.
+
+This is a "what radios are broadcasting around me" scope, like any BLE scanner —
+useful and legitimate, without crossing into tracking people.
+
+---
+
 ## Be honest about what this can and can't do
 
 WiFi sensing is a real field (MIT's RF-Pose/WiTrack, CSI activity recognition).
