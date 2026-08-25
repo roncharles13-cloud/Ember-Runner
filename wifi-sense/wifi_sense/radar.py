@@ -37,10 +37,36 @@ from typing import Iterator
 APPLE_COMPANY_ID = 0x004C
 STALE_SEC = 12.0        # drop a device this long after we last heard it
 
+# Apple "Continuity" advertisement type byte -> coarse DEVICE CATEGORY.
+# This is device *kind*, never a person: we never decode the payload that
+# follows (no hashed contact identifiers, no owner resolution, no tracking).
+_APPLE_TYPE = {
+    0x02: "beacon",   # iBeacon
+    0x05: "phone",    # AirDrop (an active iOS device)
+    0x07: "airpods",  # Proximity Pairing (AirPods / Beats)
+    0x0C: "phone",    # Handoff
+    0x10: "phone",    # Nearby (active iPhone/iPad)
+    0x12: "findmy",   # Find My / offline finding beacon
+}
+
 
 def short_id(address: str) -> str:
     """Ephemeral, non-reversible short tag for a (already-random) address."""
     return hashlib.sha1(address.encode()).hexdigest()[:6]
+
+
+def classify(kind: str, apple_bytes, name: str) -> str:
+    """Coarse device *category* from the advertisement. Never an identity."""
+    n = (name or "").lower()
+    if "watch" in n:
+        return "watch"
+    if "airpod" in n or "buds" in n or "beats" in n or "headphone" in n:
+        return "airpods"
+    if "tile" in n or "airtag" in n:
+        return "tag"
+    if kind == "apple" and apple_bytes:
+        return _APPLE_TYPE.get(apple_bytes[0], "apple")
+    return "apple" if kind == "apple" else "ble"
 
 
 @dataclass
@@ -51,10 +77,12 @@ class Device:
     name: str
     first_seen: float
     last_seen: float
+    category: str = "ble"
 
     def as_dict(self, now: float) -> dict:
         return {"id": self.id, "rssi": round(self.rssi, 1), "kind": self.kind,
-                "name": self.name, "age": round(now - self.last_seen, 1),
+                "category": self.category, "name": self.name,
+                "age": round(now - self.last_seen, 1),
                 "held": round(now - self.first_seen, 1)}
 
 
@@ -68,15 +96,17 @@ class SyntheticRadarScanner:
         self.rng = random.Random(seed)
         # a pool of would-be neighbours; each drifts in RSSI and blinks in/out
         self._pool = []
-        names = ["", "", "AirPods Pro", "", "Watch", "", "Beacon", ""]
-        for i in range(8):
-            apple = self.rng.random() < 0.55
+        cast = [("apple", "phone", ""), ("apple", "airpods", "AirPods Pro"),
+                ("apple", "phone", ""), ("apple", "watch", "Apple Watch"),
+                ("apple", "findmy", ""), ("ble", "tag", "Tile"),
+                ("ble", "ble", ""), ("apple", "phone", "")]
+        for i, (kind, cat, name) in enumerate(cast):
             self._pool.append({
                 "id": short_id(f"sim-{i}-{self.rng.random()}"),
-                "kind": "apple" if apple else "ble",
-                "name": names[i] if apple else "",
+                "kind": kind, "category": cat, "name": name,
                 "rssi": self.rng.uniform(-90, -45),
                 "present": self.rng.random() < 0.6,
+                "vel": self.rng.uniform(-0.6, 0.6),   # rssi drift bias = motion
                 "first": time.time(),
             })
 
@@ -93,10 +123,12 @@ class SyntheticRadarScanner:
                         d["first"] = now
                 if not d["present"]:
                     continue
-                # random walk RSSI (device moving nearer/farther)
-                d["rssi"] = max(-98, min(-38, d["rssi"] + self.rng.gauss(0, 1.6)))
+                # random walk RSSI with a slow drift bias = the device moving
+                if self.rng.random() < 0.02:
+                    d["vel"] = self.rng.uniform(-0.6, 0.6)
+                d["rssi"] = max(-98, min(-38, d["rssi"] + d["vel"] + self.rng.gauss(0, 0.8)))
                 devs.append(Device(d["id"], d["rssi"], d["kind"], d["name"],
-                                   d["first"], now).as_dict(now))
+                                   d["first"], now, d["category"]).as_dict(now))
             yield devs
             time.sleep(period)
 
@@ -130,16 +162,18 @@ class BLERadarScanner:
             mfg = adv.manufacturer_data or {}
             kind = "apple" if APPLE_COMPANY_ID in mfg else "ble"
             name = adv.local_name or getattr(device, "name", None) or ""
+            category = classify(kind, mfg.get(APPLE_COMPANY_ID), name)
             sid = short_id(device.address)
             now = time.time()
             with self._lock:
                 d = self._devices.get(sid)
                 if d is None:
                     self._devices[sid] = Device(sid, float(rssi), kind,
-                                                name or "", now, now)
+                                                name or "", now, now, category)
                 else:
                     d.rssi = float(rssi)
                     d.kind = kind
+                    d.category = category
                     if name:
                         d.name = name
                     d.last_seen = now

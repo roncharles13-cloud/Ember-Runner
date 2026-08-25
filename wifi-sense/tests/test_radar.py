@@ -21,9 +21,20 @@ def test_snapshot_shape_and_fields():
     s = SyntheticRadarScanner(hz=1000.0, seed=2)   # fast tick for testing
     snap = next(iter(s.snapshots()))
     for d in snap:
-        assert set(d) >= {"id", "rssi", "kind", "name", "age", "held"}
+        assert set(d) >= {"id", "rssi", "kind", "category", "name", "age", "held"}
         assert d["kind"] in ("apple", "ble")
+        assert d["category"] in ("phone", "airpods", "watch", "findmy", "tag", "beacon", "apple", "ble")
         assert -100 <= d["rssi"] <= -30
+
+
+def test_classify_categories():
+    from wifi_sense.radar import classify
+    assert classify("apple", bytes([0x07]), "") == "airpods"
+    assert classify("apple", bytes([0x10]), "") == "phone"
+    assert classify("apple", bytes([0x12]), "") == "findmy"
+    assert classify("apple", None, "Apple Watch") == "watch"
+    assert classify("ble", None, "Tile") == "tag"
+    assert classify("ble", None, "") == "ble"
 
 
 def test_sees_some_devices_over_time():
